@@ -10,7 +10,7 @@ import os
 import time
 import torch.nn.functional as F
 from queue import Queue
-from threading import Thread
+from threading import Thread,Event
 
 # ==============================
 # CONFIG
@@ -149,7 +149,7 @@ def run_encoder(frame_tensor):
             if f.dim() == 4 and f.shape[0] == 1:
                 f = f.squeeze(0)   # (C, H, W)
 
-            processed_feats.append(f.cpu().numpy())
+            processed_feats.append(f.cpu().numpy().astype(np.float16))
 
         return processed_feats
 
@@ -174,12 +174,12 @@ start_time = time.time()
 # ==============================
 # VIDEO READER THREAD
 # ==============================
-
+stop_event=Event()
 def video_reader():
 
     global frame_id
 
-    while True:
+    while not stop_event.is_set():
 
         ret, frame = cap.read()
 
@@ -198,13 +198,12 @@ def video_reader():
 # ==============================
 
 def encoder_worker():
-    global frame_id  # Add this if needed
+    global frame_id  
     while True:
         fid, frame = frame_queue.get()
         
         tensor = preprocess(frame).to(device)
         
-        # 🔥 USE THE FIXED FUNCTION
         features = run_encoder(tensor)  
         
         print(f"📤 Frame {fid}: {len(features)} feature levels")
@@ -214,11 +213,8 @@ def encoder_worker():
 
         payload = {
             "frame_id": fid,
-            "timestamp": time.time(),
             "features": features,  
             "frame_jpg": frame_jpg,
-            "orig_shape": frame.shape,
-            "small_shape": small.shape
         }
         payload_queue.put(payload)
 
@@ -232,7 +228,7 @@ def sender_worker():
     global total_frames
     global total_kb
 
-    while True:
+    while not stop_event.is_set():
 
         payload = payload_queue.get()
 
@@ -260,11 +256,9 @@ print("🚀 Start threaded streaming")
 reader = Thread(target=video_reader, daemon=True)
 encoder_t = Thread(target=encoder_worker, daemon=True)
 sender = Thread(target=sender_worker, daemon=True)
-
 reader.start()
 encoder_t.start()
 sender.start()
-
 # ==============================
 # MAIN LOOP
 # ==============================

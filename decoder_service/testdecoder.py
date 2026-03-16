@@ -58,7 +58,6 @@ connection = pika.BlockingConnection(
 
 channel = connection.channel()
 
-# ✅ Thêm durable=True để khớp với producer
 channel.queue_declare(queue=QUEUE_NAME, durable=False)
 
 # ==============================
@@ -144,10 +143,8 @@ def callback(ch, method, properties, body):
         # ✅ Chạy decoder
         outputs = run_decoder(feats)
 
-        # ✅ Lấy scores + boxes
-        # pred_logits: (1, num_queries, num_classes)
-        # pred_boxes:  (1, num_queries, 4)
-        logits = outputs["pred_logits"][0]        # (num_queries, num_classes)
+        
+        logits = outputs["pred_logits"][0]       
         boxes  = outputs["pred_boxes"][0].cpu().numpy()
 
         probs  = logits.softmax(-1)               # softmax qua classes
